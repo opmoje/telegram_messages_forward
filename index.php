@@ -2,13 +2,18 @@
 
 date_default_timezone_set('Europe/Moscow');
 
-include 'vendor/autoload.php';
+if (!file_exists('madeline.php')) {
+    copy('https://phar.madelineproto.xyz/madeline.php', 'madeline.php');
+}
+
+require_once 'madeline.php';
 
 use danog\MadelineProto\API;
 use danog\MadelineProto\Logger;
 use danog\MadelineProto\Settings;
 
 const FLOOD_WAIT = 5;
+const CHECK_INTERVAL = 10;
 
 function askLink(string $prompt): string
 {
@@ -129,30 +134,29 @@ while (true) {
         $session['last_message_id'] = $latestMsgId;
     }
 
-    break;
-}
+    if (!empty($forwardingMessages)) {
+        $forwardingMessages = array_reverse($forwardingMessages);
+        $batchSize = 10;
+        $batch = [];
+        $current = 0;
 
-if (!empty($forwardingMessages)) {
-    $forwardingMessages = array_reverse($forwardingMessages);
-    $batchSize = 10;
-    $batch = [];
-    $current = 0;
+        while (!empty($forwardingMessages)) {
+            $forwarding = array_shift($forwardingMessages);
+            $batch[] = $forwarding;
+            $current++;
 
-    while (!empty($forwardingMessages)) {
-        $forwarding = array_shift($forwardingMessages);
-        $batch[] = $forwarding;
-        $current++;
+            if ($current >= $batchSize) {
+                forwardMessages($batch);
+                $batch = [];
+                $current = 0;
+            }
+        }
 
-        if ($current >= $batchSize) {
+        if (!empty($batch)) {
             forwardMessages($batch);
-            $batch = [];
-            $current = 0;
         }
     }
 
-    if (!empty($batch)) {
-        forwardMessages($batch);
-    }
+    file_put_contents($sessionFile, json_encode($session));
+    sleep(CHECK_INTERVAL);
 }
-
-file_put_contents($sessionFile, json_encode($session));
